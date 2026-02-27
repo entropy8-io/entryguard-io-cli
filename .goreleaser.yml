@@ -1,7 +1,8 @@
 project_name: eg
 
 builds:
-  - main: .
+  - id: eg
+    main: .
     binary: eg
     env:
       - CGO_ENABLED=0
@@ -15,12 +16,34 @@ builds:
     ldflags:
       - -s -w -X main.version={{.Version}}
 
+  - id: eg-agent
+    main: ./cmd/eg-agent
+    binary: eg-agent
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
 archives:
-  - format: tar.gz
+  - id: eg-archive
+    builds:
+      - eg
+    format: tar.gz
     name_template: "eg_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
         format: zip
+
+  - id: eg-agent-archive
+    builds:
+      - eg-agent
+    format: tar.gz
+    name_template: "eg-agent_{{ .Os }}_{{ .Arch }}"
 
 checksum:
   name_template: "checksums.txt"
