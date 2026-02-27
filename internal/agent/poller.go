@@ -53,6 +53,8 @@ func (p *Poller) poll() {
 		return
 	}
 
+	// Commands are returned in FIFO order (by createdAt ASC) and executed
+	// sequentially — no parallelism, so earlier sessions are applied first.
 	for _, cmd := range commands {
 		p.processCommand(cmd)
 	}
