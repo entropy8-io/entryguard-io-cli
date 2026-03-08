@@ -23,6 +23,7 @@ builds:
       - CGO_ENABLED=0
     goos:
       - linux
+      - windows
     goarch:
       - amd64
       - arm64
@@ -44,6 +45,9 @@ archives:
       - eg-agent
     format: tar.gz
     name_template: "eg-agent_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
 
 checksum:
   name_template: "checksums.txt"

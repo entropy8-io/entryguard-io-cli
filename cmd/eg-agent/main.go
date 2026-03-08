@@ -23,7 +23,7 @@ var (
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "eg-agent",
-		Short: "EntryGuard Agent — executes IP whitelisting scripts on Linux hosts",
+		Short: "EntryGuard Agent — executes IP whitelisting scripts on hosts",
 		Long:  "A lightweight agent that polls EntryGuard for commands and executes local scripts to apply/revoke IP rules.",
 	}
 
@@ -86,19 +86,19 @@ func runInit() error {
 	}
 
 	// Apply script path
-	fmt.Print("Apply script path [/etc/eg-agent/scripts/apply.sh]: ")
+	fmt.Printf("Apply script path [%s]: ", agent.DefaultApplyScript)
 	applyScript, _ := reader.ReadString('\n')
 	applyScript = strings.TrimSpace(applyScript)
 	if applyScript == "" {
-		applyScript = "/etc/eg-agent/scripts/apply.sh"
+		applyScript = agent.DefaultApplyScript
 	}
 
 	// Revoke script path
-	fmt.Print("Revoke script path [/etc/eg-agent/scripts/revoke.sh]: ")
+	fmt.Printf("Revoke script path [%s]: ", agent.DefaultRevokeScript)
 	revokeScript, _ := reader.ReadString('\n')
 	revokeScript = strings.TrimSpace(revokeScript)
 	if revokeScript == "" {
-		revokeScript = "/etc/eg-agent/scripts/revoke.sh"
+		revokeScript = agent.DefaultRevokeScript
 	}
 
 	// Test connection
@@ -143,6 +143,13 @@ func runInit() error {
 	fmt.Printf("     - %s\n", applyScript)
 	fmt.Printf("     - %s\n", revokeScript)
 	fmt.Printf("  2. Start the agent: eg-agent run\n")
+	if runtime.GOOS == "windows" {
+		fmt.Println("  3. To run as a Windows Service, use NSSM:")
+		fmt.Println("     nssm install eg-agent eg-agent.exe run")
+		fmt.Println("     nssm start eg-agent")
+	} else {
+		fmt.Println("  3. For production, run as a systemd service (see docs)")
+	}
 
 	return nil
 }

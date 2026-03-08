@@ -3,12 +3,32 @@ package agent
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"time"
 
 	"gopkg.in/yaml.v3"
 )
 
-const DefaultConfigPath = "/etc/eg-agent/config.yml"
+var (
+	DefaultConfigPath    string
+	DefaultShell         string
+	DefaultApplyScript   string
+	DefaultRevokeScript  string
+)
+
+func init() {
+	if runtime.GOOS == "windows" {
+		DefaultConfigPath = `C:\eg-agent\config.yml`
+		DefaultShell = "powershell.exe"
+		DefaultApplyScript = `C:\eg-agent\scripts\apply.ps1`
+		DefaultRevokeScript = `C:\eg-agent\scripts\revoke.ps1`
+	} else {
+		DefaultConfigPath = "/etc/eg-agent/config.yml"
+		DefaultShell = "/bin/bash"
+		DefaultApplyScript = "/etc/eg-agent/scripts/apply.sh"
+		DefaultRevokeScript = "/etc/eg-agent/scripts/revoke.sh"
+	}
+}
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
@@ -51,7 +71,7 @@ func LoadConfig(path string) (*Config, error) {
 		},
 		Execution: ExecutionConfig{
 			Timeout: 30 * time.Second,
-			Shell:   "/bin/bash",
+			Shell:   DefaultShell,
 		},
 	}
 
