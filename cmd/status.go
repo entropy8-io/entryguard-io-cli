@@ -21,7 +21,8 @@ var statusCmd = &cobra.Command{
 		type statusResult struct {
 			User     *api.UserInfo
 			Sessions []api.Session
-			IP       *api.IpResponse
+			IPv4     string
+			IPv6     string
 			Errors   []error
 		}
 
@@ -40,17 +41,20 @@ var statusCmd = &cobra.Command{
 		}
 		result.Sessions = sessions
 
-		ip, err := client.DetectIP()
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("ip detection: %w", err))
-		}
-		result.IP = ip
+		result.IPv4, result.IPv6 = api.DetectIPs()
 
 		if output.Format == "json" {
+			ips := map[string]string{}
+			if result.IPv4 != "" {
+				ips["ipv4"] = result.IPv4
+			}
+			if result.IPv6 != "" {
+				ips["ipv6"] = result.IPv6
+			}
 			output.PrintJSON(map[string]any{
 				"user":     result.User,
 				"sessions": result.Sessions,
-				"ip":       result.IP,
+				"ip":       ips,
 			})
 			return nil
 		}
@@ -75,9 +79,13 @@ var statusCmd = &cobra.Command{
 
 		// IP
 		fmt.Println(bold("Detected IP"))
-		if result.IP != nil {
-			fmt.Printf("  %s (IPv%d)\n", result.IP.IP, result.IP.Version)
-		} else {
+		if result.IPv4 != "" {
+			fmt.Printf("  IPv4: %s\n", result.IPv4)
+		}
+		if result.IPv6 != "" {
+			fmt.Printf("  IPv6: %s\n", result.IPv6)
+		}
+		if result.IPv4 == "" && result.IPv6 == "" {
 			fmt.Println("  (unavailable)")
 		}
 		fmt.Println()

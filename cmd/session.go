@@ -41,6 +41,23 @@ var sessionStartCmd = &cobra.Command{
 			req.Ipv6Address = sessionIPv6
 		}
 
+		// Auto-detect IPs when no flags provided
+		if sessionIPv4 == "" && sessionIPv6 == "" {
+			output.Info("Detecting IP addresses...")
+			ipv4, ipv6 := api.DetectIPs()
+			req.Ipv4Address = ipv4
+			req.Ipv6Address = ipv6
+			if ipv4 != "" && ipv6 != "" {
+				output.Info("Detected IPv4: %s, IPv6: %s", ipv4, ipv6)
+			} else if ipv4 != "" {
+				output.Info("Detected IPv4: %s", ipv4)
+			} else if ipv6 != "" {
+				output.Info("Detected IPv6: %s", ipv6)
+			} else {
+				output.Info("Client-side detection failed, using server-side detection")
+			}
+		}
+
 		output.Info("Starting session...")
 		session, err := client.StartSession(req)
 		if err != nil {

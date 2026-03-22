@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 )
 
@@ -159,6 +161,48 @@ func (c *Client) GetMe() (*UserInfo, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return &user, nil
+}
+
+// DetectIPs queries ipify to detect both IPv4 and IPv6 addresses concurrently.
+// Either or both may be returned; errors are silently ignored per IP version.
+func DetectIPs() (ipv4, ipv6 string) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	httpClient := &http.Client{Timeout: 5 * time.Second}
+
+	go func() {
+		defer wg.Done()
+		resp, err := httpClient.Get("https://api4.ipify.org?format=json")
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+		var result struct {
+			IP string `json:"ip"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&result) == nil && result.IP != "" && !strings.Contains(result.IP, ":") {
+			ipv4 = result.IP
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		resp, err := httpClient.Get("https://api6.ipify.org?format=json")
+		if err != nil {
+			return
+		}
+		defer resp.Body.Close()
+		var result struct {
+			IP string `json:"ip"`
+		}
+		if json.NewDecoder(resp.Body).Decode(&result) == nil && result.IP != "" && strings.Contains(result.IP, ":") {
+			ipv6 = result.IP
+		}
+	}()
+
+	wg.Wait()
+	return
 }
 
 func (c *Client) DetectIP() (*IpResponse, error) {
