@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/entryguard-io/cli/internal/api"
 	"github.com/entryguard-io/cli/internal/output"
@@ -69,7 +70,11 @@ var sessionStopCmd = &cobra.Command{
 
 		var sessionID string
 		if len(args) > 0 {
-			sessionID = args[0]
+			resolved, err := resolveSessionID(client, args[0])
+			if err != nil {
+				return err
+			}
+			sessionID = resolved
 		} else {
 			sessions, err := client.ListSessions()
 			if err != nil {
@@ -153,7 +158,12 @@ var sessionGetCmd = &cobra.Command{
 			return err
 		}
 
-		session, err := client.GetSession(args[0])
+		sessionID, err := resolveSessionID(client, args[0])
+		if err != nil {
+			return err
+		}
+
+		session, err := client.GetSession(sessionID)
 		if err != nil {
 			return err
 		}
@@ -182,8 +192,13 @@ var sessionExtendCmd = &cobra.Command{
 			return err
 		}
 
-		output.Info("Extending session %s by %d hours...", args[0][:8], extendHours)
-		session, err := client.ExtendSession(args[0], extendHours)
+		sessionID, err := resolveSessionID(client, args[0])
+		if err != nil {
+			return err
+		}
+
+		output.Info("Extending session %s by %d hours...", sessionID[:8], extendHours)
+		session, err := client.ExtendSession(sessionID, extendHours)
 		if err != nil {
 			return err
 		}
@@ -197,6 +212,36 @@ var sessionExtendCmd = &cobra.Command{
 			output.FormatTime(session.ExpiresAt), output.FormatDuration(session.ExpiresAt))
 		return nil
 	},
+}
+
+// resolveSessionID resolves a full or prefix session ID to the full UUID.
+// If the input is already a full UUID (36 chars), it's returned as-is.
+// Otherwise, it fetches the session list and matches by prefix.
+func resolveSessionID(client *api.Client, input string) (string, error) {
+	if len(input) >= 36 {
+		return input, nil
+	}
+
+	sessions, err := client.ListSessions()
+	if err != nil {
+		return "", err
+	}
+
+	var matches []string
+	for _, s := range sessions {
+		if strings.HasPrefix(s.ID, input) {
+			matches = append(matches, s.ID)
+		}
+	}
+
+	switch len(matches) {
+	case 0:
+		return "", fmt.Errorf("no session found matching '%s'", input)
+	case 1:
+		return matches[0], nil
+	default:
+		return "", fmt.Errorf("ambiguous session ID '%s' — matches %d sessions", input, len(matches))
+	}
 }
 
 func printSessionSummary(s *api.Session) {
