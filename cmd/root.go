@@ -33,6 +33,10 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&outputFlag, "output", "table", "Output format: table or json")
 }
 
+func SetVersion(v string) {
+	rootCmd.Version = v
+}
+
 func Execute() error {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
