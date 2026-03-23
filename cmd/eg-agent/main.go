@@ -202,24 +202,41 @@ func runAgent() error {
 		log.Printf("[tunnel] connecting to edge at %s", cfg.Tunnel.EdgeURL)
 	}
 
-	// Start poller for script commands
-	executor := agent.NewExecutor(cfg.Execution.Shell, cfg.Execution.Timeout)
-	poller := agent.NewPoller(client, executor, cfg.Scripts, cfg.Agent.PollInterval)
+	// Start poller for script commands (only if scripts are configured)
+	hasScripts := cfg.Scripts.Apply != "" || cfg.Scripts.Revoke != ""
+	var poller *agent.Poller
+	if hasScripts {
+		executor := agent.NewExecutor(cfg.Execution.Shell, cfg.Execution.Timeout)
+		poller = agent.NewPoller(client, executor, cfg.Scripts, cfg.Agent.PollInterval)
+		log.Printf("[scripts] polling enabled (apply=%s, revoke=%s)", cfg.Scripts.Apply, cfg.Scripts.Revoke)
+	}
+
+	if !hasScripts && tunnelConn == nil {
+		return fmt.Errorf("no scripts configured and tunnel mode is disabled — nothing to do")
+	}
 
 	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	go func() {
+	if poller != nil {
+		go func() {
+			<-sigCh
+			log.Println("shutting down...")
+			if tunnelConn != nil {
+				tunnelConn.Stop()
+			}
+			poller.Stop()
+		}()
+		poller.Run()
+	} else {
+		// Tunnel-only mode: block until shutdown signal
+		log.Println("[tunnel] running in tunnel-only mode (no script polling)")
 		<-sigCh
 		log.Println("shutting down...")
-		if tunnelConn != nil {
-			tunnelConn.Stop()
-		}
-		poller.Stop()
-	}()
+		tunnelConn.Stop()
+	}
 
-	poller.Run()
 	return nil
 }
 
