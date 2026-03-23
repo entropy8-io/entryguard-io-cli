@@ -3,7 +3,6 @@ package tunnel
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net"
 	"net/http"
@@ -160,7 +159,7 @@ func (c *Connector) handleControlMessage(data []byte) {
 func (c *Connector) handleStreamMessage(msg *Message) {
 	switch msg.Type {
 	case MsgNewStream:
-		go c.handleNewStream(msg)
+		c.handleNewStream(msg)
 
 	case MsgData:
 		if conn, ok := c.streams.Load(msg.StreamID); ok {
@@ -176,6 +175,7 @@ func (c *Connector) handleStreamMessage(msg *Message) {
 
 func (c *Connector) handleNewStream(msg *Message) {
 	target := string(msg.Payload)
+	log.Printf("[tunnel] new stream %d → %s", msg.StreamID, target)
 
 	// Security: only dial allowed targets
 	if _, allowed := c.targets.Load(target); !allowed {
@@ -195,17 +195,12 @@ func (c *Connector) handleNewStream(msg *Message) {
 
 	// Read from local target and send to edge
 	go func() {
-		defer func() {
-			c.closeStream(msg.StreamID)
-		}()
+		defer c.closeStream(msg.StreamID)
 
 		buf := make([]byte, 32*1024)
 		for {
 			n, err := conn.Read(buf)
 			if err != nil {
-				if err != io.EOF {
-					// Connection closed
-				}
 				return
 			}
 			payload := make([]byte, n)
