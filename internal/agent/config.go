@@ -85,6 +85,20 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, fmt.Errorf("failed to parse config file: %w", err)
 	}
 
+	// Apply defaults for zero values (YAML unmarshalling overrides struct defaults)
+	if cfg.Agent.PollInterval <= 0 {
+		cfg.Agent.PollInterval = 3 * time.Second
+	}
+	if cfg.Agent.HeartbeatInterval <= 0 {
+		cfg.Agent.HeartbeatInterval = 30 * time.Second
+	}
+	if cfg.Execution.Timeout <= 0 {
+		cfg.Execution.Timeout = 30 * time.Second
+	}
+	if cfg.Execution.Shell == "" {
+		cfg.Execution.Shell = DefaultShell
+	}
+
 	if cfg.Server.URL == "" {
 		return nil, fmt.Errorf("server.url is required")
 	}
