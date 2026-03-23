@@ -12,6 +12,7 @@ import (
 	"syscall"
 
 	"github.com/entryguard-io/cli/internal/agent"
+	"github.com/entryguard-io/cli/internal/agent/tunnel"
 	"github.com/spf13/cobra"
 )
 
@@ -193,7 +194,15 @@ func runAgent() error {
 	hb.Start()
 	defer hb.Stop()
 
-	// Start poller
+	// Start tunnel connector if enabled
+	var tunnelConn *tunnel.Connector
+	if cfg.Tunnel.Enabled && cfg.Tunnel.EdgeURL != "" {
+		tunnelConn = tunnel.NewConnector(cfg.Tunnel.EdgeURL, cfg.Server.APIKey)
+		go tunnelConn.Run()
+		log.Printf("[tunnel] connecting to edge at %s", cfg.Tunnel.EdgeURL)
+	}
+
+	// Start poller for script commands
 	executor := agent.NewExecutor(cfg.Execution.Shell, cfg.Execution.Timeout)
 	poller := agent.NewPoller(client, executor, cfg.Scripts, cfg.Agent.PollInterval)
 
@@ -204,6 +213,9 @@ func runAgent() error {
 	go func() {
 		<-sigCh
 		log.Println("shutting down...")
+		if tunnelConn != nil {
+			tunnelConn.Stop()
+		}
 		poller.Stop()
 	}()
 

@@ -35,6 +35,7 @@ type Config struct {
 	Agent     AgentConfig     `yaml:"agent"`
 	Scripts   ScriptsConfig   `yaml:"scripts"`
 	Execution ExecutionConfig `yaml:"execution"`
+	Tunnel    TunnelConfig    `yaml:"tunnel"`
 }
 
 type ServerConfig struct {
@@ -56,6 +57,11 @@ type ScriptsConfig struct {
 type ExecutionConfig struct {
 	Timeout time.Duration `yaml:"timeout"`
 	Shell   string        `yaml:"shell"`
+}
+
+type TunnelConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	EdgeURL string `yaml:"edge_url"`
 }
 
 func LoadConfig(path string) (*Config, error) {

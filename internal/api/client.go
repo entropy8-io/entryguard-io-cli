@@ -66,15 +66,16 @@ type IpResponse struct {
 }
 
 type SessionResourceIp struct {
-	ID           string `json:"id"`
-	ResourceID   string `json:"resourceId"`
-	ResourceName string `json:"resourceName"`
-	IpVersion    int    `json:"ipVersion"`
-	IpAddress    string `json:"ipAddress"`
-	Status       string `json:"status"`
-	AppliedAt    string `json:"appliedAt"`
-	RemovedAt    string `json:"removedAt"`
-	ErrorMessage string `json:"errorMessage"`
+	ID             string `json:"id"`
+	ResourceID     string `json:"resourceId"`
+	ResourceName   string `json:"resourceName"`
+	IpVersion      int    `json:"ipVersion"`
+	IpAddress      string `json:"ipAddress"`
+	Status         string `json:"status"`
+	ProviderRuleId string `json:"providerRuleId"`
+	AppliedAt      string `json:"appliedAt"`
+	RemovedAt      string `json:"removedAt"`
+	ErrorMessage   string `json:"errorMessage"`
 }
 
 type Session struct {

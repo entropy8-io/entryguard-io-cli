@@ -274,6 +274,16 @@ func printSessionSummary(s *api.Session) {
 	if len(s.ResourceIps) > 0 {
 		fmt.Printf("  Resources: %d\n", len(s.ResourceIps))
 	}
+
+	// Show tunnel connection details
+	tunnels := getTunnelResources(s.ResourceIps)
+	if len(tunnels) > 0 {
+		fmt.Println()
+		fmt.Println("  Tunnel resources:")
+		for _, t := range tunnels {
+			fmt.Printf("    %-20s %s\n", t.name, t.connection)
+		}
+	}
 }
 
 func printSessionDetail(s *api.Session) {
@@ -296,8 +306,15 @@ func printSessionDetail(s *api.Session) {
 		fmt.Println()
 		var rows [][]string
 		for _, r := range s.ResourceIps {
+			name := r.ResourceName
+			if isTunnelResource(r) {
+				port := parseTunnelPort(r.ProviderRuleId)
+				if port != "" {
+					name += "  edge.entryguard.io:" + port
+				}
+			}
 			rows = append(rows, []string{
-				r.ResourceName,
+				name,
 				fmt.Sprintf("IPv%d", r.IpVersion),
 				r.IpAddress,
 				output.StatusColor(r.Status),
@@ -306,6 +323,43 @@ func printSessionDetail(s *api.Session) {
 		}
 		output.PrintTable([]string{"RESOURCE", "VERSION", "IP", "STATUS", "APPLIED"}, rows)
 	}
+}
+
+type tunnelInfo struct {
+	name       string
+	connection string
+}
+
+func getTunnelResources(resourceIps []api.SessionResourceIp) []tunnelInfo {
+	seen := make(map[string]bool)
+	var tunnels []tunnelInfo
+	for _, r := range resourceIps {
+		if !isTunnelResource(r) || seen[r.ResourceName] {
+			continue
+		}
+		seen[r.ResourceName] = true
+		port := parseTunnelPort(r.ProviderRuleId)
+		if port != "" {
+			tunnels = append(tunnels, tunnelInfo{
+				name:       r.ResourceName,
+				connection: "edge.entryguard.io:" + port,
+			})
+		}
+	}
+	return tunnels
+}
+
+func isTunnelResource(r api.SessionResourceIp) bool {
+	return strings.HasPrefix(r.ProviderRuleId, "tunnel:")
+}
+
+func parseTunnelPort(providerRuleId string) string {
+	// Format: "tunnel:<port>:<cidr>"
+	parts := strings.SplitN(providerRuleId, ":", 3)
+	if len(parts) >= 2 {
+		return parts[1]
+	}
+	return ""
 }
 
 func init() {
