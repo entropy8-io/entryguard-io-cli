@@ -162,8 +162,8 @@ func (c *Connector) handleStreamMessage(msg *Message) {
 		c.handleNewStream(msg)
 
 	case MsgData:
-		if conn, ok := c.streams.Load(msg.StreamID); ok {
-			if _, err := conn.(net.Conn).Write(msg.Payload); err != nil {
+		if s, ok := c.streams.Load(msg.StreamID); ok {
+			if err := s.(*pendingStream).Write(msg.Payload); err != nil {
 				c.closeStream(msg.StreamID)
 			}
 		}
@@ -175,7 +175,6 @@ func (c *Connector) handleStreamMessage(msg *Message) {
 
 func (c *Connector) handleNewStream(msg *Message) {
 	target := string(msg.Payload)
-	log.Printf("[tunnel] new stream %d → %s", msg.StreamID, target)
 
 	// Security: only dial allowed targets
 	if _, allowed := c.targets.Load(target); !allowed {
@@ -184,35 +183,49 @@ func (c *Connector) handleNewStream(msg *Message) {
 		return
 	}
 
-	conn, err := net.DialTimeout("tcp", target, 10*time.Second)
-	if err != nil {
-		log.Printf("[tunnel] failed to dial %s: %v", target, err)
-		c.sendMessage(&Message{Type: MsgCloseStream, StreamID: msg.StreamID})
-		return
-	}
+	// Register a pending stream immediately so data can be buffered
+	ps := &pendingStream{}
+	c.streams.Store(msg.StreamID, ps)
 
-	c.streams.Store(msg.StreamID, conn)
-
-	// Read from local target and send to edge
+	// Dial target in background — buffered data will be flushed on success
 	go func() {
-		defer c.closeStream(msg.StreamID)
-
-		buf := make([]byte, 32*1024)
-		for {
-			n, err := conn.Read(buf)
-			if err != nil {
-				return
-			}
-			payload := make([]byte, n)
-			copy(payload, buf[:n])
-			if sendErr := c.sendMessage(&Message{
-				Type:     MsgData,
-				StreamID: msg.StreamID,
-				Payload:  payload,
-			}); sendErr != nil {
-				return
-			}
+		conn, err := net.DialTimeout("tcp", target, 10*time.Second)
+		if err != nil {
+			log.Printf("[tunnel] failed to dial %s: %v", target, err)
+			c.closeStream(msg.StreamID)
+			c.sendMessage(&Message{Type: MsgCloseStream, StreamID: msg.StreamID})
+			return
 		}
+
+		if err := ps.Activate(conn); err != nil {
+			log.Printf("[tunnel] failed to activate stream %d: %v", msg.StreamID, err)
+			conn.Close()
+			c.closeStream(msg.StreamID)
+			c.sendMessage(&Message{Type: MsgCloseStream, StreamID: msg.StreamID})
+			return
+		}
+
+		// Read from local target and send to edge
+		go func() {
+			defer c.closeStream(msg.StreamID)
+
+			buf := make([]byte, 32*1024)
+			for {
+				n, err := conn.Read(buf)
+				if err != nil {
+					return
+				}
+				payload := make([]byte, n)
+				copy(payload, buf[:n])
+				if sendErr := c.sendMessage(&Message{
+					Type:     MsgData,
+					StreamID: msg.StreamID,
+					Payload:  payload,
+				}); sendErr != nil {
+					return
+				}
+			}
+		}()
 	}()
 }
 
@@ -226,15 +239,15 @@ func (c *Connector) sendMessage(msg *Message) error {
 }
 
 func (c *Connector) closeStream(streamID uint32) {
-	if conn, ok := c.streams.LoadAndDelete(streamID); ok {
-		conn.(net.Conn).Close()
+	if s, ok := c.streams.LoadAndDelete(streamID); ok {
+		s.(*pendingStream).Close()
 		c.sendMessage(&Message{Type: MsgCloseStream, StreamID: streamID})
 	}
 }
 
 func (c *Connector) closeAllStreams() {
 	c.streams.Range(func(key, value interface{}) bool {
-		value.(net.Conn).Close()
+		value.(*pendingStream).Close()
 		c.streams.Delete(key)
 		return true
 	})
