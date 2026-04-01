@@ -20,6 +20,8 @@ type Command struct {
 	Description        string `json:"description"`
 	ResourceIdentifier string `json:"resourceIdentifier"`
 	ResourceType       string `json:"resourceType"`
+	ScriptDir          string `json:"scriptDir,omitempty"`
+	ScriptTimeout      int    `json:"scriptTimeout,omitempty"`
 }
 
 type RegisterRequest struct {
@@ -36,9 +38,17 @@ type HeartbeatRequest struct {
 }
 
 type CommandResultRequest struct {
-	Success        bool   `json:"success"`
-	ResultMessage  string `json:"resultMessage,omitempty"`
-	ProviderRuleID string `json:"providerRuleId,omitempty"`
+	Success        bool            `json:"success"`
+	ResultMessage  string          `json:"resultMessage,omitempty"`
+	ProviderRuleID string          `json:"providerRuleId,omitempty"`
+	ScriptResults  []ScriptResult  `json:"scriptResults,omitempty"`
+}
+
+type ScriptResult struct {
+	ScriptName string `json:"scriptName"`
+	Success    bool   `json:"success"`
+	Output     string `json:"output,omitempty"`
+	DurationMs int64  `json:"durationMs"`
 }
 
 type ExecutionResult struct {
