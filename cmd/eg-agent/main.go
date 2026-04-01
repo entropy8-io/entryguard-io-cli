@@ -86,22 +86,6 @@ func runInit() error {
 		agentName = hostname
 	}
 
-	// Apply script path
-	fmt.Printf("Apply script path [%s]: ", agent.DefaultApplyScript)
-	applyScript, _ := reader.ReadString('\n')
-	applyScript = strings.TrimSpace(applyScript)
-	if applyScript == "" {
-		applyScript = agent.DefaultApplyScript
-	}
-
-	// Revoke script path
-	fmt.Printf("Revoke script path [%s]: ", agent.DefaultRevokeScript)
-	revokeScript, _ := reader.ReadString('\n')
-	revokeScript = strings.TrimSpace(revokeScript)
-	if revokeScript == "" {
-		revokeScript = agent.DefaultRevokeScript
-	}
-
 	// Test connection
 	fmt.Println()
 	fmt.Println("Testing connection...")
@@ -128,10 +112,6 @@ func runInit() error {
 		Agent: agent.AgentConfig{
 			Name: agentName,
 		},
-		Scripts: agent.ScriptsConfig{
-			Apply:  applyScript,
-			Revoke: revokeScript,
-		},
 	}
 
 	if err := agent.WriteConfig(configPath, cfg); err != nil {
@@ -140,16 +120,15 @@ func runInit() error {
 
 	fmt.Printf("\nConfig written to %s\n", configPath)
 	fmt.Println("\nNext steps:")
-	fmt.Printf("  1. Create your apply/revoke scripts at:\n")
-	fmt.Printf("     - %s\n", applyScript)
-	fmt.Printf("     - %s\n", revokeScript)
-	fmt.Printf("  2. Start the agent: eg-agent run\n")
+	fmt.Println("  1. Create script directories for each resource (e.g., /etc/eg-agent/scripts/my-resource/apply/)")
+	fmt.Println("  2. Configure the Script Directory on each resource in the EntryGuard dashboard")
+	fmt.Printf("  3. Start the agent: eg-agent run\n")
 	if runtime.GOOS == "windows" {
-		fmt.Println("  3. To run as a Windows Service, use NSSM:")
+		fmt.Println("  4. To run as a Windows Service, use NSSM:")
 		fmt.Println("     nssm install eg-agent eg-agent.exe run")
 		fmt.Println("     nssm start eg-agent")
 	} else {
-		fmt.Println("  3. For production, run as a systemd service (see docs)")
+		fmt.Println("  4. For production, run as a systemd service (see docs)")
 	}
 
 	return nil
@@ -202,40 +181,24 @@ func runAgent() error {
 		log.Printf("[tunnel] connecting to edge at %s", cfg.Tunnel.EdgeURL)
 	}
 
-	// Start poller for script commands (only if scripts are configured)
-	hasScripts := cfg.Scripts.Apply != "" || cfg.Scripts.Revoke != ""
-	var poller *agent.Poller
-	if hasScripts {
-		executor := agent.NewExecutor(cfg.Execution.Shell, cfg.Execution.Timeout)
-		poller = agent.NewPoller(client, executor, cfg.Scripts, cfg.Agent.PollInterval)
-		log.Printf("[scripts] polling enabled (apply=%s, revoke=%s)", cfg.Scripts.Apply, cfg.Scripts.Revoke)
-	}
-
-	if !hasScripts && tunnelConn == nil {
-		return fmt.Errorf("no scripts configured and tunnel mode is disabled — nothing to do")
-	}
+	// Start poller for script commands
+	executor := agent.NewExecutor(cfg.Execution.Shell, cfg.Execution.Timeout)
+	poller := agent.NewPoller(client, executor, cfg.Agent.PollInterval)
+	log.Println("[poller] polling enabled (script directories configured per resource)")
 
 	// Handle shutdown signals
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-	if poller != nil {
-		go func() {
-			<-sigCh
-			log.Println("shutting down...")
-			if tunnelConn != nil {
-				tunnelConn.Stop()
-			}
-			poller.Stop()
-		}()
-		poller.Run()
-	} else {
-		// Tunnel-only mode: block until shutdown signal
-		log.Println("[tunnel] running in tunnel-only mode (no script polling)")
+	go func() {
 		<-sigCh
 		log.Println("shutting down...")
-		tunnelConn.Stop()
-	}
+		if tunnelConn != nil {
+			tunnelConn.Stop()
+		}
+		poller.Stop()
+	}()
+	poller.Run()
 
 	return nil
 }
@@ -263,8 +226,7 @@ func runStatus() error {
 	fmt.Printf("Config:   %s\n", configPath)
 	fmt.Printf("Server:   %s\n", cfg.Server.URL)
 	fmt.Printf("Agent:    %s\n", cfg.Agent.Name)
-	fmt.Printf("Apply:    %s\n", cfg.Scripts.Apply)
-	fmt.Printf("Revoke:   %s\n", cfg.Scripts.Revoke)
+	fmt.Printf("Tunnel:   %v\n", cfg.Tunnel.Enabled)
 	fmt.Println()
 
 	// Test connection

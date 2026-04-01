@@ -12,16 +12,14 @@ import (
 type Poller struct {
 	client   *Client
 	executor *Executor
-	scripts  ScriptsConfig
 	interval time.Duration
 	stopCh   chan struct{}
 }
 
-func NewPoller(client *Client, executor *Executor, scripts ScriptsConfig, interval time.Duration) *Poller {
+func NewPoller(client *Client, executor *Executor, interval time.Duration) *Poller {
 	return &Poller{
 		client:   client,
 		executor: executor,
-		scripts:  scripts,
 		interval: interval,
 		stopCh:   make(chan struct{}),
 	}
@@ -74,57 +72,19 @@ func (p *Poller) processCommand(cmd Command) {
 		return
 	}
 
-	// Multi-script mode: scriptDir is set on the resource config
-	if cmd.ScriptDir != "" {
-		p.processMultiScript(cmd)
-		return
-	}
-
-	// Single-script mode: use agent-level script config
-	p.processSingleScript(cmd)
-}
-
-func (p *Poller) processSingleScript(cmd Command) {
-	var scriptPath string
-	switch cmd.CommandType {
-	case "APPLY":
-		scriptPath = p.scripts.Apply
-	case "REVOKE":
-		scriptPath = p.scripts.Revoke
-	}
-
-	if scriptPath == "" {
-		log.Printf("[poller] no script configured for %s (command=%s)", cmd.CommandType, cmd.ID)
+	if cmd.ScriptDir == "" {
+		log.Printf("[poller] no scriptDir configured for resource %s (command=%s)", cmd.ResourceIdentifier, cmd.ID)
 		p.client.ReportResult(cmd.ID, CommandResultRequest{
 			Success:       false,
-			ResultMessage: "No script configured for " + cmd.CommandType,
+			ResultMessage: "No scriptDir configured on resource. Set Script Directory in the EntryGuard dashboard.",
 		})
 		return
 	}
 
-	log.Printf("[poller] executing %s: cidr=%s resource=%s (command=%s)", cmd.CommandType, cmd.CIDR, cmd.ResourceIdentifier, cmd.ID)
-
-	result := p.executor.Execute(scriptPath, cmd.CIDR, cmd.Description)
-
-	log.Printf("[poller] %s result: success=%t duration=%s (command=%s)", cmd.CommandType, result.Success, result.Duration, cmd.ID)
-	if result.Output != "" {
-		log.Printf("[poller] output: %s", result.Output)
-	}
-
-	reportReq := CommandResultRequest{
-		Success:       result.Success,
-		ResultMessage: result.Output,
-	}
-	if result.Success {
-		reportReq.ProviderRuleID = "agent-" + cmd.ID
-	}
-
-	if err := p.client.ReportResult(cmd.ID, reportReq); err != nil {
-		log.Printf("[poller] failed to report result for command %s: %v", cmd.ID, err)
-	}
+	p.executeScripts(cmd)
 }
 
-func (p *Poller) processMultiScript(cmd Command) {
+func (p *Poller) executeScripts(cmd Command) {
 	subdir := strings.ToLower(cmd.CommandType) // "apply" or "revoke"
 	dir := filepath.Join(cmd.ScriptDir, subdir)
 

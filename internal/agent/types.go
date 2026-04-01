@@ -1,7 +1,5 @@
 package agent
 
-import "time"
-
 type AgentResponse struct {
 	ID              string  `json:"id"`
 	Name            string  `json:"name"`
@@ -51,8 +49,3 @@ type ScriptResult struct {
 	DurationMs int64  `json:"durationMs"`
 }
 
-type ExecutionResult struct {
-	Success  bool
-	Output   string
-	Duration time.Duration
-}

@@ -10,30 +10,23 @@ import (
 )
 
 var (
-	DefaultConfigPath    string
-	DefaultShell         string
-	DefaultApplyScript   string
-	DefaultRevokeScript  string
+	DefaultConfigPath string
+	DefaultShell      string
 )
 
 func init() {
 	if runtime.GOOS == "windows" {
 		DefaultConfigPath = `C:\eg-agent\config.yml`
 		DefaultShell = "powershell.exe"
-		DefaultApplyScript = `C:\eg-agent\scripts\apply.ps1`
-		DefaultRevokeScript = `C:\eg-agent\scripts\revoke.ps1`
 	} else {
 		DefaultConfigPath = "/etc/eg-agent/config.yml"
 		DefaultShell = "/bin/bash"
-		DefaultApplyScript = "/etc/eg-agent/scripts/apply.sh"
-		DefaultRevokeScript = "/etc/eg-agent/scripts/revoke.sh"
 	}
 }
 
 type Config struct {
 	Server    ServerConfig    `yaml:"server"`
 	Agent     AgentConfig     `yaml:"agent"`
-	Scripts   ScriptsConfig   `yaml:"scripts"`
 	Execution ExecutionConfig `yaml:"execution"`
 	Tunnel    TunnelConfig    `yaml:"tunnel"`
 }
@@ -47,11 +40,6 @@ type AgentConfig struct {
 	Name              string        `yaml:"name"`
 	PollInterval      time.Duration `yaml:"poll_interval"`
 	HeartbeatInterval time.Duration `yaml:"heartbeat_interval"`
-}
-
-type ScriptsConfig struct {
-	Apply  string `yaml:"apply"`
-	Revoke string `yaml:"revoke"`
 }
 
 type ExecutionConfig struct {

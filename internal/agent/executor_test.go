@@ -201,22 +201,3 @@ func TestExecuteDir_customTimeout(t *testing.T) {
 	}
 }
 
-func TestExecute_singleScript(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("skipping on windows")
-	}
-
-	dir := t.TempDir()
-	scriptPath := filepath.Join(dir, "test.sh")
-	os.WriteFile(scriptPath, []byte("#!/bin/bash\necho \"applied $1 $2\""), 0755)
-
-	executor := NewExecutor("/bin/bash", 10*time.Second)
-	result := executor.Execute(scriptPath, "10.0.0.1/32", "test session")
-
-	if !result.Success {
-		t.Errorf("expected success, got: %s", result.Output)
-	}
-	if result.Output == "" {
-		t.Error("expected non-empty output")
-	}
-}
