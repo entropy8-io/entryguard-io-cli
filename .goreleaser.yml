@@ -49,6 +49,42 @@ archives:
       - goos: windows
         format: zip
 
+dockers:
+  - id: eg-agent-amd64
+    ids:
+      - eg-agent
+    goos: linux
+    goarch: amd64
+    dockerfile: Dockerfile.agent
+    image_templates:
+      - "ghcr.io/entropy8-io/eg-agent:{{ .Version }}-amd64"
+      - "ghcr.io/entropy8-io/eg-agent:latest-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+
+  - id: eg-agent-arm64
+    ids:
+      - eg-agent
+    goos: linux
+    goarch: arm64
+    dockerfile: Dockerfile.agent
+    image_templates:
+      - "ghcr.io/entropy8-io/eg-agent:{{ .Version }}-arm64"
+      - "ghcr.io/entropy8-io/eg-agent:latest-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+
+docker_manifests:
+  - name_template: "ghcr.io/entropy8-io/eg-agent:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/entropy8-io/eg-agent:{{ .Version }}-amd64"
+      - "ghcr.io/entropy8-io/eg-agent:{{ .Version }}-arm64"
+
+  - name_template: "ghcr.io/entropy8-io/eg-agent:latest"
+    image_templates:
+      - "ghcr.io/entropy8-io/eg-agent:latest-amd64"
+      - "ghcr.io/entropy8-io/eg-agent:latest-arm64"
+
 checksum:
   name_template: "checksums.txt"
 

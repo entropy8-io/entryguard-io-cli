@@ -1,0 +1,5 @@
+FROM alpine:3.20
+RUN apk add --no-cache bash ca-certificates
+COPY eg-agent /usr/local/bin/eg-agent
+ENTRYPOINT ["eg-agent"]
+CMD ["run"]
