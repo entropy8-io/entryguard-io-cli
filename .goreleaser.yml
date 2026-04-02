@@ -56,6 +56,7 @@ dockers:
     goos: linux
     goarch: amd64
     dockerfile: Dockerfile.agent
+    use: buildx
     image_templates:
       - "ghcr.io/entropy8-io/eg-agent:{{ .Version }}-amd64"
       - "ghcr.io/entropy8-io/eg-agent:latest-amd64"
@@ -68,6 +69,7 @@ dockers:
     goos: linux
     goarch: arm64
     dockerfile: Dockerfile.agent
+    use: buildx
     image_templates:
       - "ghcr.io/entropy8-io/eg-agent:{{ .Version }}-arm64"
       - "ghcr.io/entropy8-io/eg-agent:latest-arm64"
