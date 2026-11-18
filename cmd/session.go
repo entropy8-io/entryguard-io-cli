@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/entryguard-io/cli/internal/api"
 	"github.com/entryguard-io/cli/internal/output"
@@ -15,24 +16,42 @@ var sessionCmd = &cobra.Command{
 }
 
 var (
-	sessionDuration int
-	sessionIPv4     string
-	sessionIPv6     string
-	extendHours     int
+	sessionDuration  string
+	sessionIPv4      string
+	sessionIPv6      string
+	sessionResources []string
+	sessionLabel     string
+	sessionWait      bool
+	sessionWaitFor   time.Duration
+	extendHours      int
 )
 
 var sessionStartCmd = &cobra.Command{
 	Use:   "start",
 	Short: "Start a new IP whitelisting session",
+	Long: `Start a session that whitelists your public IP on your cloud resources.
+
+Without --resources the session opens every resource you can access (one such
+session per IP). With --resources it opens only those, by name or id; scoped
+sessions may overlap on an IP and each job stops its own. Run "eg resources"
+to see what you can open.`,
+	Example: `  eg session start
+  eg session start --duration 15m --resources staging-db-sg --label "deploy 1234" --wait
+  eg session start --duration 4 --output json`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		duration, err := api.ParseSessionDuration(sessionDuration)
+		if err != nil {
+			return err
+		}
 		client, err := getClient()
 		if err != nil {
 			return err
 		}
 
-		req := &api.StartSessionRequest{}
-		if sessionDuration > 0 {
-			req.DurationHours = &sessionDuration
+		req := &api.StartSessionRequest{Label: sessionLabel}
+		duration.Apply(req)
+		if len(sessionResources) > 0 {
+			req.Resources = sessionResources
 		}
 		if sessionIPv4 != "" {
 			req.Ipv4Address = sessionIPv4
@@ -64,6 +83,20 @@ var sessionStartCmd = &cobra.Command{
 			return err
 		}
 
+		if sessionWait {
+			output.Info("Waiting for IP rules to apply...")
+			settled, waitErr := client.WaitForSession(session.ID, sessionWaitFor, 2*time.Second)
+			if settled != nil {
+				session = settled
+			}
+			if waitErr != nil {
+				if output.Format == "json" {
+					output.PrintJSON(session)
+				}
+				return waitErr
+			}
+		}
+
 		if output.Format == "json" {
 			output.PrintJSON(session)
 			return nil
@@ -71,6 +104,9 @@ var sessionStartCmd = &cobra.Command{
 
 		output.Success("Session started")
 		printSessionSummary(session)
+		if sessionWait && session.Status != "ACTIVE" {
+			return fmt.Errorf("session ended up %s; see the per-resource errors with: eg session get %s", session.Status, session.ID[:8])
+		}
 		return nil
 	},
 }
@@ -264,6 +300,9 @@ func resolveSessionID(client *api.Client, input string) (string, error) {
 func printSessionSummary(s *api.Session) {
 	fmt.Printf("  ID:        %s\n", s.ID)
 	fmt.Printf("  Status:    %s\n", output.StatusColor(s.Status))
+	if s.Label != "" {
+		fmt.Printf("  Label:     %s\n", s.Label)
+	}
 	if s.Ipv4Address != "" {
 		fmt.Printf("  IPv4:      %s\n", s.Ipv4Address)
 	}
@@ -290,6 +329,12 @@ func printSessionDetail(s *api.Session) {
 	fmt.Printf("Session %s\n", s.ID)
 	fmt.Printf("  Status:    %s\n", output.StatusColor(s.Status))
 	fmt.Printf("  User:      %s (%s)\n", s.UserName, s.UserEmail)
+	if s.Label != "" {
+		fmt.Printf("  Label:     %s\n", s.Label)
+	}
+	if s.Scoped {
+		fmt.Printf("  Scoped:    yes\n")
+	}
 	if s.Ipv4Address != "" {
 		fmt.Printf("  IPv4:      %s\n", s.Ipv4Address)
 	}
@@ -363,7 +408,11 @@ func parseTunnelPort(providerRuleId string) string {
 }
 
 func init() {
-	sessionStartCmd.Flags().IntVar(&sessionDuration, "duration", 0, "Session duration in hours")
+	sessionStartCmd.Flags().StringVar(&sessionDuration, "duration", "", "Session length: hours (4, 4h) or minutes (15m, 1h30m); default: your org's default")
+	sessionStartCmd.Flags().StringSliceVar(&sessionResources, "resources", nil, "Only open these resources (names or ids, comma-separated or repeated)")
+	sessionStartCmd.Flags().StringVar(&sessionLabel, "label", "", "Label shown in Session activity and the audit log (e.g. the CI run URL)")
+	sessionStartCmd.Flags().BoolVar(&sessionWait, "wait", false, "Wait until the IP rules are applied (status leaves PENDING) before returning")
+	sessionStartCmd.Flags().DurationVar(&sessionWaitFor, "wait-timeout", 60*time.Second, "How long --wait waits before giving up")
 	sessionStartCmd.Flags().StringVar(&sessionIPv4, "ipv4", "", "IPv4 address to whitelist")
 	sessionStartCmd.Flags().StringVar(&sessionIPv6, "ipv6", "", "IPv6 address to whitelist")
 

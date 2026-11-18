@@ -90,15 +90,38 @@ type Session struct {
 	ExpiresAt        string              `json:"expiresAt"`
 	EndedAt          string              `json:"endedAt"`
 	EndedReason      string              `json:"endedReason"`
+	Label            string              `json:"label,omitempty"`
+	Scoped           bool                `json:"scoped,omitempty"`
+	CountryCode      string              `json:"countryCode,omitempty"`
 	ResourceIps      []SessionResourceIp `json:"resourceIps"`
 	CreatedAt        string              `json:"createdAt"`
 	OrganizationName string              `json:"organizationName"`
 }
 
 type StartSessionRequest struct {
-	DurationHours *int   `json:"durationHours,omitempty"`
-	Ipv4Address   string `json:"ipv4Address,omitempty"`
-	Ipv6Address   string `json:"ipv6Address,omitempty"`
+	DurationHours   *int   `json:"durationHours,omitempty"`
+	DurationMinutes *int   `json:"durationMinutes,omitempty"`
+	Ipv4Address     string `json:"ipv4Address,omitempty"`
+	Ipv6Address     string `json:"ipv6Address,omitempty"`
+	// Resources limits the session to these names or ids (a scoped session).
+	// nil opens every resource the user can access.
+	Resources []string `json:"resources,omitempty"`
+	Label     string   `json:"label,omitempty"`
+}
+
+// AvailableResource is one resource the caller may put in StartSessionRequest.Resources.
+type AvailableResource struct {
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Provider     string `json:"provider"`
+	ResourceType string `json:"resourceType"`
+	Region       string `json:"region,omitempty"`
+}
+
+// AvailableResources is the reply of GET /sessions/resources.
+type AvailableResources struct {
+	MaxDurationMinutes int                 `json:"maxDurationMinutes"`
+	Resources          []AvailableResource `json:"resources"`
 }
 
 type ExtendSessionRequest struct {
@@ -228,6 +251,46 @@ func (c *Client) StartSession(req *StartSessionRequest) (*Session, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return &session, nil
+}
+
+// ListAvailableResources returns what the caller can open a session on and the
+// longest duration they may ask for. Needs the sessions:read scope.
+func (c *Client) ListAvailableResources() (*AvailableResources, error) {
+	data, err := c.do("GET", "/sessions/resources", nil)
+	if err != nil {
+		return nil, err
+	}
+	var out AvailableResources
+	if err := json.Unmarshal(data, &out); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &out, nil
+}
+
+// IsSettled reports whether the session has left PENDING, i.e. the rules have
+// been applied (ACTIVE / PARTIAL), failed, or the session already ended.
+func (s *Session) IsSettled() bool {
+	return s.Status != "PENDING"
+}
+
+// WaitForSession polls the session until it is settled or the timeout passes.
+// The last seen session is returned together with a timeout error, so callers
+// can still stop it.
+func (c *Client) WaitForSession(id string, timeout, interval time.Duration) (*Session, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		session, err := c.GetSession(id)
+		if err != nil {
+			return nil, err
+		}
+		if session.IsSettled() {
+			return session, nil
+		}
+		if time.Now().After(deadline) {
+			return session, fmt.Errorf("session %s still %s after %s", id, session.Status, timeout)
+		}
+		time.Sleep(interval)
+	}
 }
 
 func (c *Client) StopSession(id string) (*Session, error) {
